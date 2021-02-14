@@ -16,7 +16,7 @@ class Watershed_Kmeans:
         self.labels_kmeans =None
         self.markers = None
 
-    def apply(self, img):
+    def apply(self, img, markers_filter=None):
         # Apply kmeans to different regions of interest
         X = img.flatten().reshape((img.shape[0] * img.shape[1], 1))
         k = self.n_clusters
@@ -33,25 +33,27 @@ class Watershed_Kmeans:
             img_avg[pos] = avg
             avgs_unique.append(avg)
 
-        # Get the two clusters with the highest average lightness
-        c2 = np.argmax(avgs_unique)
-        pos_foreground = np.where(labels_kmeans==c2)
+        # Get the cluster with the highest average lightness
+        c = np.argmax(avgs_unique)
 
-        # avg_unique_mod = np.copy(avgs_unique)
-        # avg_unique_mod[c2] = -1
-        # c1 = np.argmax(avg_unique_mod)
-        pos_background = np.where(labels_kmeans!=c2)
+        # Consider this cluster as the foreground and the others as the background
+        pos_foreground = np.where(labels_kmeans==c)
+        pos_background = np.where(labels_kmeans!=c)
 
-        # Sample points to indicate the foreground and the background from the selected clusters
+        # Sample points to indicate the foreground and the background
         markers = np.zeros_like(img)
         np.random.seed(self.random_state)
-        markers_foreground = np.random.randint(0, len(pos_foreground[0]), self.n_markers_foreground)
-        markers_background = np.random.randint(0, len(pos_background[0]), self.n_markers_background)
+        markers_foreground = np.random.choice(range(len(pos_foreground[0])), self.n_markers_foreground, replace=False)
+        markers_background = np.random.choice(range(len(pos_background[0])), self.n_markers_background, replace=False)
 
         # Assign the background markers (value 1) and the foreground markers (value 2)
         self.markers = np.zeros_like(img)
         for i in markers_background: self.markers[pos_background[0][i], pos_background[1][i]] = 1
         for i in markers_foreground: self.markers[pos_foreground[0][i], pos_foreground[1][i]] = 2
+
+        # Apply a filter on the markers
+        if markers_filter:
+            self.markers = markers_filter(self.markers, img, n_markers=self.n_markers_foreground / 5)
 
         # Apply marker-controlled watershed on the elevation map
         elevation_map = sobel(img)

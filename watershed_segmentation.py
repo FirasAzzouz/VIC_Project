@@ -72,9 +72,12 @@ class MRI_Segmentation:
         self.img_mask_paths = []
         self.dataset_path = dataset_path
         self.filter_tumor = filter_tumor
-        self.scores = []
+        self.scores = {}
 
-    def run(self, segmentation_method, nmax=-1, plot=False):
+    def run(self, segmentation_method, imgs_range=None, plot=False, save_fig=None, save_score=None):
+        if plot: fig, ax = plt.subplots(len(imgs_range), 3, figsize = (5 * 3, 5 * len(imgs_range)))
+        if imgs_range: ini = imgs_range[0]
+        else: ini = 0
         i = 0
         for dirpath,_,filenames in os.walk(self.dataset_path):
             for f in filenames:
@@ -86,6 +89,12 @@ class MRI_Segmentation:
                 if self.filter_tumor:
                     if len(np.unique(cv.imread(img_mask_path))) < 2:continue
 
+                if imgs_range:
+                    if i < ini:
+                        i+=1
+                        continue
+                    if i > imgs_range[-1]: break
+
                 self.img_paths.append(img_path)
                 self.img_mask_paths.append(img_mask_path)
 
@@ -96,24 +105,30 @@ class MRI_Segmentation:
                 labels = segmentation_method.apply(img, MRI_Segmentation.markers_filter, **kwargs)
 
                 score = MRI_Segmentation.evaluate(labels - 1, img_mask)
-                self.scores.append(score)
+                self.scores[img_path] = score
+                # self.scores.append(score)
 
                 if plot:
-                    print("Score = ", np.round(score, 2))
-                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-                    ax1.imshow(img, cmap="gray")
-                    ax2.imshow(img_mask, cmap="gray")
-                    ax3.imshow(labels, cmap="gray")
-                    ax1.set_title("original image")
-                    ax2.set_title("true mask")
-                    ax3.set_title("watershed mask")
-                    ax1.axis("off")
-                    ax2.axis("off")
-                    ax3.axis("off")
-                    plt.show()
+                    # print("Score = ", np.round(score, 2))
+                    ii = i - ini
+                    ax[ii, 0].imshow(img, cmap="gray")
+                    ax[ii, 1].imshow(img_mask, cmap="gray")
+                    ax[ii, 2].imshow(labels, cmap="gray")
+                    ax[ii, 0].set_title("original image",  fontdict={'fontsize': 15})
+                    ax[ii, 1].set_title("true mask",  fontdict={'fontsize': 15})
+                    ax[ii, 2].set_title(f"watershed mask: Score ={np.round(score, 2)}", fontdict={'fontsize': 15})
+                    ax[ii, 0].axis("off")
+                    ax[ii, 1].axis("off")
+                    ax[ii, 2].axis("off")
 
                 i+=1
-                if i>nmax: return
+                if (i - ini) % 100==0: print("Number of segmented imgs:", (i - ini))
+
+        if plot:
+            plt.savefig(save_fig + ".png")
+            plt.show()
+        if save_score: np.save(save_score + '.npy', self.scores)
+
 
     @staticmethod
     def markers_filter(markers, img, n_markers=100):
